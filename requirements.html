@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Edit Requirements</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        .field-group { margin-bottom: 15px; display: flex; gap: 10px; align-items: center; }
+        .flash { padding: 10px; margin: 10px 0; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        button { padding: 5px 10px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Edit Job Requirements</h2>
+    <div id="flash-message"></div>
+    
+    <form id="requirements-form">
+        <label for="search_mode">Search Mode:</label>
+        <select name="search_mode" id="search_mode">
+            <option value="section">Section-Based</option>
+            <option value="whole">Whole-Resume</option>
+        </select><br><br>
+
+        <label for="threshold">Minimum Score (1-10):</label>
+        <input type="number" name="threshold" id="threshold" min="1" max="10" value="6"><br><br>
+
+        <div id="fields">
+            <!-- Will be populated by JavaScript -->
+        </div>
+
+        <button type="button" onclick="addField()">Add Field</button><br><br>
+        <button type="submit">Save Requirements</button>
+    </form>
+
+    <a href="upload.html">Back to Upload</a>
+
+    <script>
+        // Global variable to store current requirements
+        let currentRequirements = {
+            search_mode: 'section',
+            threshold: 6,
+            requirements: {}
+        };
+
+        // Load current requirements when page loads
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadRequirements();
+            renderFields();
+        });
+
+        // Load requirements from API
+        async function loadRequirements() {
+            try {
+                const response = await fetch('/api/requirements');
+                if (response.ok) {
+                    currentRequirements = await response.json();
+                    // Update form inputs
+                    document.getElementById('search_mode').value = currentRequirements.search_mode;
+                    document.getElementById('threshold').value = currentRequirements.threshold;
+                }
+            } catch (error) {
+                console.error('Error loading requirements:', error);
+                showFlashMessage('Failed to load requirements', 'error');
+            }
+        }
+
+        // Render fields based on current requirements
+        function renderFields() {
+            const fieldsDiv = document.getElementById('fields');
+            fieldsDiv.innerHTML = '';
+            
+            if (currentRequirements.search_mode === 'section') {
+                for (const [section, keywords] of Object.entries(currentRequirements.requirements)) {
+                    addSectionField(section, keywords.join(', '));
+                }
+            } else {
+                for (const keyword of currentRequirements.requirements) {
+                    addKeywordField(keyword);
+                }
+            }
+        }
+
+        // Handle form submission
+        document.getElementById('requirements-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                search_mode: document.getElementById('search_mode').value,
+                threshold: parseInt(document.getElementById('threshold').value),
+                requirements: getRequirementsData()
+            };
+
+            try {
+                const response = await fetch('/api/requirements', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (response.ok) {
+                    // Reload the updated requirements
+                    await loadRequirements();
+                    renderFields();
+                    showFlashMessage('Requirements saved successfully!', 'success');
+                } else {
+                    showFlashMessage('Failed to save requirements', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving requirements:', error);
+                showFlashMessage('Network error while saving', 'error');
+            }
+        });
+
+        // Field management functions
+        function addSectionField(main = '', subs = '') {
+            const container = document.getElementById('fields');
+            const div = document.createElement('div');
+            div.className = 'field-group';
+            div.innerHTML = `
+                <input type="text" name="main_points[]" value="${main}" placeholder="Section (e.g., Skills)">
+                <input type="text" name="sub_points[]" value="${subs}" placeholder="Keywords (comma-separated)">
+                <button type="button" onclick="this.parentElement.remove()">Remove</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function addKeywordField(keyword = '') {
+            const container = document.getElementById('fields');
+            const div = document.createElement('div');
+            div.className = 'field-group';
+            div.innerHTML = `
+                <input type="text" name="keywords[]" value="${keyword}" placeholder="Keyword (e.g., Python)">
+                <button type="button" onclick="this.parentElement.remove()">Remove</button>
+            `;
+            container.appendChild(div);
+        }
+
+        function addField() {
+            if (document.getElementById('search_mode').value === 'section') {
+                addSectionField();
+            } else {
+                addKeywordField();
+            }
+        }
+
+        function getRequirementsData() {
+            const mode = document.getElementById('search_mode').value;
+            
+            if (mode === 'section') {
+                const requirements = {};
+                const mainPoints = document.getElementsByName('main_points[]');
+                const subPoints = document.getElementsByName('sub_points[]');
+                
+                for (let i = 0; i < mainPoints.length; i++) {
+                    const main = mainPoints[i].value.trim();
+                    const subs = subPoints[i].value.split(',').map(s => s.trim()).filter(s => s);
+                    if (main) requirements[main] = subs;
+                }
+                return requirements;
+            } else {
+                const keywords = [];
+                const inputs = document.getElementsByName('keywords[]');
+                for (let input of inputs) {
+                    const keyword = input.value.trim();
+                    if (keyword) keywords.push(keyword);
+                }
+                return keywords;
+            }
+        }
+
+        function showFlashMessage(message, type) {
+            const flashDiv = document.getElementById('flash-message');
+            flashDiv.innerHTML = `<div class="flash ${type}">${message}</div>`;
+            setTimeout(() => flashDiv.innerHTML = '', 3000);
+        }
+    </script>
+</body>
+</html>
